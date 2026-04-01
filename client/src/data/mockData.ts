@@ -401,17 +401,37 @@ export const rainfallData: RainfallDataPoint[] = [
   { time: '23:00', actual: 0,    predicted: 38.0, threshold: 30 },
 ];
 
-// Flood risk trend (7 days) — calibrated to NCM event data
-// Storm built up from 20 Mar, peaked 23 Mar, continuing 24-27 Mar
-export const floodRiskTrend: FloodRiskTrend[] = [
-  { date: 'Mar 17', abuDhabiCity: 8,  alAin: 12, alDhafra: 6,  alWathba: 5  },
-  { date: 'Mar 18', abuDhabiCity: 12, alAin: 15, alDhafra: 9,  alWathba: 7  },
-  { date: 'Mar 19', abuDhabiCity: 22, alAin: 28, alDhafra: 18, alWathba: 15 },
-  { date: 'Mar 20', abuDhabiCity: 42, alAin: 48, alDhafra: 52, alWathba: 38 },
-  { date: 'Mar 21', abuDhabiCity: 58, alAin: 55, alDhafra: 72, alWathba: 65 },
-  { date: 'Mar 22', abuDhabiCity: 68, alAin: 62, alDhafra: 80, alWathba: 82 },
-  { date: 'Mar 23', abuDhabiCity: 78, alAin: 74, alDhafra: 85, alWathba: 86 },
-];
+// Flood risk trend (7 days) — calibrated risk profile with dynamic date labels
+// The values remain scenario-based, but the x-axis always reflects the latest 7 days up to today.
+const formatFloodTrendDate = (date: Date) =>
+  date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'Asia/Dubai',
+  });
+
+const floodRiskTrendBase = [
+  { abuDhabiCity: 8,  alAin: 12, alDhafra: 6,  alWathba: 5  },
+  { abuDhabiCity: 12, alAin: 15, alDhafra: 9,  alWathba: 7  },
+  { abuDhabiCity: 22, alAin: 28, alDhafra: 18, alWathba: 15 },
+  { abuDhabiCity: 42, alAin: 48, alDhafra: 52, alWathba: 38 },
+  { abuDhabiCity: 58, alAin: 55, alDhafra: 72, alWathba: 65 },
+  { abuDhabiCity: 68, alAin: 62, alDhafra: 80, alWathba: 82 },
+  { abuDhabiCity: 78, alAin: 74, alDhafra: 85, alWathba: 86 },
+] as const;
+
+const floodTrendToday = new Date();
+floodTrendToday.setHours(12, 0, 0, 0);
+
+export const floodRiskTrend: FloodRiskTrend[] = floodRiskTrendBase.map((point, index) => {
+  const date = new Date(floodTrendToday);
+  date.setDate(floodTrendToday.getDate() - (floodRiskTrendBase.length - 1 - index));
+
+  return {
+    date: formatFloodTrendDate(date),
+    ...point,
+  };
+});
 
 // AI Model metrics
 export const aiModels: AIModelMetric[] = [
