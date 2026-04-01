@@ -167,6 +167,19 @@ function buildEvacZones(multiplier: number) {
 
 type AdminOverlayLevel = 'safe' | 'minor' | 'moderate' | 'severe' | 'extreme';
 
+type AdminSignal = {
+  overlayLevel: AdminOverlayLevel;
+  depthCm: number;
+  estimatedAreaKm2: number;
+  precipitationValue: number;
+  riskIndex: number;
+  severityLabel: string;
+  waterLabel: string;
+  dataModeLabel: string;
+  sourceLabel: string;
+  alertLevel: 'critical' | 'warning' | 'watch' | 'safe';
+};
+
 const ADMIN_LEVEL_ORDER: Record<AdminOverlayLevel, number> = {
   safe: 0,
   minor: 1,
@@ -174,6 +187,274 @@ const ADMIN_LEVEL_ORDER: Record<AdminOverlayLevel, number> = {
   severe: 3,
   extreme: 4,
 };
+
+const ADMIN_OVERLAY_COLORS: Record<AdminOverlayLevel, { fill: string; stroke: string; text: string }> = {
+  safe:     { fill: '#10B981', stroke: '#86EFAC', text: '#ECFDF5' },
+  minor:    { fill: '#F59E0B', stroke: '#FCD34D', text: '#FFFBEB' },
+  moderate: { fill: '#F97316', stroke: '#FDBA74', text: '#FFF7ED' },
+  severe:   { fill: '#EF4444', stroke: '#FCA5A5', text: '#FEF2F2' },
+  extreme:  { fill: '#7C3AED', stroke: '#C4B5FD', text: '#F5F3FF' },
+};
+
+const ADMIN_LEVEL_LABELS: Record<AdminOverlayLevel, { ar: string; en: string }> = {
+  safe: { ar: 'طبيعي', en: 'Normal' },
+  minor: { ar: 'مراقبة', en: 'Monitoring' },
+  moderate: { ar: 'إنذار', en: 'Warning' },
+  severe: { ar: 'حرج', en: 'Critical' },
+  extreme: { ar: 'شديد جداً', en: 'Severe' },
+};
+
+const DISTRICT_NAME_ALIASES: Record<string, string[]> = {
+  'RAWDAT AL REEF': ['AL REEF', 'AL REEF DOWNTOWN', 'ROWDAT AL REEF'],
+  'SHAKHBOUT CITY': ['SHAKHBOUT CITY', 'KHALIFA CITY B', 'KHALIFA CITY B'],
+  'KHALIFA CITY': ['KHALIFA CITY', 'KHALIFA CITY A', 'KHALIFA CITY B'],
+  'MOHAMMED BIN ZAYED CITY': ['MOHAMMED BIN ZAYED CITY', 'MBZ', 'MBZ CITY'],
+  'MADINAT ZAYED': ['MADINAT ZAYED', 'MADINAT ZAYED (BADAA ZAYED)', 'BADAA ZAYED'],
+  'AL DHANNAH': ['AL DHANNAH', 'AL RUWAIS', 'JEBEL DHANNAH', 'AL DHANNAH PORT AREA'],
+  'AL WATHBA SOUTH': ['AL WATHBA', 'AL WATHBA FARMS'],
+  'AL SHAMKHA SOUTH': ['AL SHAMKHA', 'AL SHAMKHA FARMS'],
+  'BANI YAS': ['BANIYAS', 'BANIYAS FARMS'],
+  'AL SHAHAMA': ['AL SHAHAMA', 'AL BAHIA', 'AL RAHBA'],
+};
+
+const DISTRICT_TO_CITY_HINTS: Array<{ matcher: RegExp; cityId: string }> = [
+  { matcher: /AL AIN|HILI|JIMI|MUTARAD|MUWAIJI|KHABISI|MAQAM|FOAH|DHAHIR|WADI|FALAJ|QATTARA|ASHAREJ|NYADAT|TAWILAH|SHUAIBAH|RUFAAH|DAHMAA|HELO|JABAL/i, cityId: 'alain' },
+  { matcher: /LIWA|GHAYATHI|MIRFA|DHANNAH|RUWAIS|SILA|HABSHAN|SHAH|MADINAT ZAYED|WESTERN|DHAFRA/i, cityId: 'dhafra' },
+  { matcher: /ABU DHABI|KHALIFA|SHAKHBOUT|WATHBA|SHAMKHA|BANI YAS|RAHA|YAS|SAADIYAT|MUSSAFAH|ICAD|AL REEF|RAWDAT|BAHIA|RAHBA|CORNICHE|BATIN|KARAMA|MUSHRIF|ZAAB|MANHAL/i, cityId: 'abudhabi' },
+];
+
+function normalizeAdminName(value?: string | null) {
+  return (value ?? '')
+    .toString()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' AND ')
+    .replace(/['’`]/g, '')
+    .replace(/[^A-Z0-9]+/gi, ' ')
+    .replace(/\b(ST|CITY|DISTRICT|COMMUNITY|AREA|REGION|ISLAND|FARMS|FARM|INDUSTRIAL|PORT)\b/g, ' $1 ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function adminLevelFromDepthAndRisk(depthCm: number, riskIndex: number): AdminOverlayLevel {
+  const depthScore = depthCm >= 80 ? 4 : depthCm >= 50 ? 3 : depthCm >= 20 ? 2 : depthCm >= 5 ? 1 : 0;
+  const riskScore = riskIndex >= 85 ? 4 : riskIndex >= 65 ? 3 : riskIndex >= 45 ? 2 : riskIndex >= 20 ? 1 : 0;
+  const combinedScore = Math.max(depthScore, Math.round((depthScore * 0.55) + (riskScore * 0.45)));
+  if (combinedScore >= 4) return 'extreme';
+  if (combinedScore >= 3) return 'severe';
+  if (combinedScore >= 2) return 'moderate';
+  if (combinedScore >= 1) return 'minor';
+  return 'safe';
+}
+
+function buildAdminSignalFromLiveRegion(
+  liveRegion: any,
+  areaSqKm: number,
+  lang: 'ar' | 'en',
+): AdminSignal {
+  const liveDepth = liveRegion?.waterAccumulation?.estimatedDepthCm ?? Math.round((liveRegion?.floodRisk ?? 0) * 0.8);
+  const liveArea = liveRegion?.waterAccumulation?.estimatedAreaKm2 ?? Number((areaSqKm * clamp((liveRegion?.floodRisk ?? 0) / 100, 0.02, 0.65)).toFixed(2));
+  const precipitationValue = Math.max(liveRegion?.currentPrecipitation ?? 0, liveRegion?.totalLast24h ?? 0);
+  const riskIndex = clamp(Math.round(liveRegion?.floodRisk ?? 0), 0, 100);
+  const overlayLevel = adminLevelFromDepthAndRisk(liveDepth, riskIndex);
+  const waterLabel = precipitationValue > 0
+    ? (lang === 'ar' ? 'تجمعات مائية حية' : 'Live surface water')
+    : (lang === 'ar' ? 'أثر تجمّع/تشبّع' : 'Retention / saturation');
+  const severityLabel = ADMIN_LEVEL_LABELS[overlayLevel][lang];
+  return {
+    overlayLevel,
+    depthCm: liveDepth,
+    estimatedAreaKm2: liveArea,
+    precipitationValue,
+    riskIndex,
+    waterLabel,
+    severityLabel,
+    dataModeLabel: lang === 'ar' ? 'حي' : 'Live',
+    sourceLabel: (liveRegion?.waterAccumulation?.sources ?? ['Open-Meteo']).join(' · '),
+    alertLevel: overlayLevel === 'extreme' || overlayLevel === 'severe' ? 'critical' : overlayLevel === 'moderate' ? 'warning' : overlayLevel === 'minor' ? 'watch' : 'safe',
+  };
+}
+
+function buildAdminSignalFromHistoricalRegion(
+  historicalRegion: HistoricalRegion,
+  areaSqKm: number,
+  lang: 'ar' | 'en',
+  historicalMode: boolean,
+  historicalRange: HistoricalRange | null,
+  historicalEventActive: {year: number; month: number} | null,
+  historicalYear: number,
+  historicalMonth: number,
+): AdminSignal | null {
+  if (!historicalMode) return null;
+  const events = historicalRange
+    ? historicalRegion.events.filter((e) => {
+        const afterFrom = e.year > historicalRange.fromYear || (e.year === historicalRange.fromYear && e.month >= historicalRange.fromMonth);
+        const beforeTo = e.year < historicalRange.toYear || (e.year === historicalRange.toYear && e.month <= historicalRange.toMonth);
+        return afterFrom && beforeTo;
+      })
+    : historicalEventActive
+    ? historicalRegion.events.filter((e) => e.year === historicalEventActive.year && e.month === historicalEventActive.month)
+    : historicalRegion.events.filter((e) => e.year === historicalYear && e.month === historicalMonth);
+
+  if (events.length === 0) return null;
+
+  const depthCm = Math.max(...events.map(e => e.waterDepthCm));
+  const precipitationValue = Math.max(...events.map(e => e.precipMm));
+  const estimatedAreaKm2 = Math.max(
+    0.15,
+    Number((areaSqKm * clamp((historicalRegion.density * depthCm) / 55, 0.04, 0.88)).toFixed(2))
+  );
+  const riskIndex = clamp(Math.round((depthCm * 0.7) + (historicalRegion.density * 35)), 0, 100);
+  const overlayLevel = adminLevelFromDepthAndRisk(depthCm, riskIndex);
+  return {
+    overlayLevel,
+    depthCm,
+    estimatedAreaKm2,
+    precipitationValue,
+    riskIndex,
+    waterLabel: events.length > 1
+      ? (lang === 'ar' ? `أقصى حدث ضمن الفترة (${events.length})` : `Peak in selected range (${events.length})`)
+      : events[0].name,
+    severityLabel: ADMIN_LEVEL_LABELS[overlayLevel][lang],
+    dataModeLabel: lang === 'ar' ? 'تاريخي' : 'Historical',
+    sourceLabel: 'Historical Archive',
+    alertLevel: overlayLevel === 'extreme' || overlayLevel === 'severe' ? 'critical' : overlayLevel === 'moderate' ? 'warning' : overlayLevel === 'minor' ? 'watch' : 'safe',
+  };
+}
+
+function getFeatureNameCandidates(properties: Record<string, any>) {
+  const rawCandidates = [
+    properties.NAMEENGLISH,
+    properties.NAMEARABIC,
+    properties.COMMUNITYNAMEENG,
+    properties.COMMUNITYNAMEARA,
+    properties.DISTRICTNAMEENG,
+    properties.DISTRICTARA,
+    properties.MUNICIPALITYNAME,
+    properties.MUNICIPALITY,
+  ].filter(Boolean) as string[];
+
+  const normalized = new Set<string>();
+  rawCandidates.forEach((value) => {
+    const base = normalizeAdminName(value);
+    if (!base) return;
+    normalized.add(base);
+    const aliases = DISTRICT_NAME_ALIASES[base] ?? [];
+    aliases.forEach(alias => normalized.add(normalizeAdminName(alias)));
+  });
+  return Array.from(normalized);
+}
+
+function guessCityIdFromFeature(properties: Record<string, any>) {
+  const candidates = getFeatureNameCandidates(properties);
+  for (const candidate of candidates) {
+    for (const hint of DISTRICT_TO_CITY_HINTS) {
+      if (hint.matcher.test(candidate)) return hint.cityId;
+    }
+  }
+  return undefined;
+}
+
+function geometryCentroid(feature: any): { lat: number; lng: number } | null {
+  const geometry = feature?.geometry;
+  if (!geometry) return null;
+  const coords: [number, number][] = [];
+  const pushRing = (ring: any[]) => ring.forEach((pair) => {
+    if (Array.isArray(pair) && pair.length >= 2) coords.push([pair[1], pair[0]]);
+  });
+  if (geometry.type === 'Polygon') {
+    pushRing(geometry.coordinates?.[0] ?? []);
+  } else if (geometry.type === 'MultiPolygon') {
+    (geometry.coordinates ?? []).forEach((poly: any) => pushRing(poly?.[0] ?? []));
+  }
+  if (!coords.length) return null;
+  const lat = coords.reduce((sum, point) => sum + point[0], 0) / coords.length;
+  const lng = coords.reduce((sum, point) => sum + point[1], 0) / coords.length;
+  return { lat, lng };
+}
+
+function matchAdministrativeSignal(
+  feature: any,
+  administrativeAreas: Array<SubArea & { cityNameAr: string; cityNameEn: string }>,
+  liveRegions: any[],
+  lang: 'ar' | 'en',
+  historicalMode: boolean,
+  historicalRange: HistoricalRange | null,
+  historicalEventActive: {year: number; month: number} | null,
+  historicalYear: number,
+  historicalMonth: number,
+) {
+  const properties = feature?.properties ?? {};
+  const cityHint = guessCityIdFromFeature(properties);
+  const nameCandidates = getFeatureNameCandidates(properties);
+  const scopedAreas = cityHint ? administrativeAreas.filter(area => area.cityId === cityHint) : administrativeAreas;
+
+  let matchedArea = scopedAreas.find((area) => {
+    const areaNames = [area.nameEn, area.nameAr, area.id].map(normalizeAdminName);
+    return nameCandidates.some(candidate => areaNames.includes(candidate));
+  });
+
+  const centroid = geometryCentroid(feature);
+  if (!matchedArea && centroid) {
+    matchedArea = scopedAreas.reduce<typeof scopedAreas[number] | undefined>((nearest, candidate) => {
+      if (!nearest) return candidate;
+      const nearestDistance = haversineKm(centroid.lat, centroid.lng, nearest.lat, nearest.lng);
+      const candidateDistance = haversineKm(centroid.lat, centroid.lng, candidate.lat, candidate.lng);
+      return candidateDistance < nearestDistance ? candidate : nearest;
+    }, undefined);
+  }
+
+  if (!matchedArea) return null;
+
+  const areaHistorical = HISTORICAL_REGIONS.reduce<HistoricalRegion | null>((nearest, candidate) => {
+    if (!nearest) return candidate;
+    const nearestDistance = haversineKm(matchedArea!.lat, matchedArea!.lng, nearest.lat, nearest.lng);
+    const candidateDistance = haversineKm(matchedArea!.lat, matchedArea!.lng, candidate.lat, candidate.lng);
+    return candidateDistance < nearestDistance ? candidate : nearest;
+  }, null);
+
+  const historicalSignal = areaHistorical
+    ? buildAdminSignalFromHistoricalRegion(areaHistorical, matchedArea.areaSqKm, lang, historicalMode, historicalRange, historicalEventActive, historicalYear, historicalMonth)
+    : null;
+  if (historicalSignal) return { area: matchedArea, signal: historicalSignal };
+
+  const liveRegion = liveRegions.reduce<any | null>((nearest, candidate) => {
+    if (!nearest) return candidate;
+    const nearestDistance = haversineKm(matchedArea!.lat, matchedArea!.lng, nearest.lat, nearest.lon);
+    const candidateDistance = haversineKm(matchedArea!.lat, matchedArea!.lng, candidate.lat, candidate.lon);
+    return candidateDistance < nearestDistance ? candidate : nearest;
+  }, null);
+  if (!liveRegion) return null;
+
+  return {
+    area: matchedArea,
+    signal: buildAdminSignalFromLiveRegion(liveRegion, matchedArea.areaSqKm, lang),
+  };
+}
+
+function buildAdministrativeFeatureSignals(
+  geojson: any,
+  administrativeAreas: Array<SubArea & { cityNameAr: string; cityNameEn: string }>,
+  liveRegions: any[],
+  lang: 'ar' | 'en',
+  historicalMode: boolean,
+  historicalRange: HistoricalRange | null,
+  historicalEventActive: {year: number; month: number} | null,
+  historicalYear: number,
+  historicalMonth: number,
+) {
+  const byObjectId: Record<string, ReturnType<typeof matchAdministrativeSignal>> = {};
+  const byDistrictId: Record<string, ReturnType<typeof matchAdministrativeSignal>> = {};
+  (geojson?.features ?? []).forEach((feature: any) => {
+    const matched = matchAdministrativeSignal(feature, administrativeAreas, liveRegions, lang, historicalMode, historicalRange, historicalEventActive, historicalYear, historicalMonth);
+    if (!matched) return;
+    const props = feature?.properties ?? {};
+    if (props.OBJECTID !== undefined && props.OBJECTID !== null) byObjectId[String(props.OBJECTID)] = matched;
+    if (props.DISTRICTID !== undefined && props.DISTRICTID !== null) byDistrictId[String(props.DISTRICTID)] = matched;
+  });
+  return { byObjectId, byDistrictId };
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -574,13 +855,6 @@ export default function UnifiedMapPage() {
 
   const administrativeOverlayRegions = useMemo(() => {
     return administrativeAreas.map((area) => {
-      const liveRegion = (data?.regions ?? []).reduce<any | null>((nearest, candidate) => {
-        if (!nearest) return candidate;
-        const nearestDistance = haversineKm(area.lat, area.lng, nearest.lat, nearest.lon);
-        const candidateDistance = haversineKm(area.lat, area.lng, candidate.lat, candidate.lon);
-        return candidateDistance < nearestDistance ? candidate : nearest;
-      }, null);
-
       const historicalRegion = HISTORICAL_REGIONS.reduce<HistoricalRegion | null>((nearest, candidate) => {
         if (!nearest) return candidate;
         const nearestDistance = haversineKm(area.lat, area.lng, nearest.lat, nearest.lng);
@@ -588,92 +862,80 @@ export default function UnifiedMapPage() {
         return candidateDistance < nearestDistance ? candidate : nearest;
       }, null);
 
-      let overlayLevel: AdminOverlayLevel = 'safe';
-      let depthCm = 0;
-      let estimatedAreaKm2 = 0;
-      let waterLabel = lang === 'ar' ? 'جاف' : 'Dry';
-      let severityLabel = lang === 'ar' ? 'آمن' : 'Safe';
-      let precipitationValue = 0;
-      let dataModeLabel = lang === 'ar' ? 'حي' : 'Live';
-      let sourceLabel = 'Open-Meteo';
-      let alertLevel: 'critical' | 'warning' | 'watch' | 'safe' = 'safe';
+      const historicalSignal = historicalRegion
+        ? buildAdminSignalFromHistoricalRegion(
+            historicalRegion,
+            area.areaSqKm,
+            lang,
+            historicalMode,
+            historicalRange,
+            historicalEventActive,
+            historicalYear,
+            historicalMonth,
+          )
+        : null;
 
-      if (historicalMode && historicalRegion) {
-        dataModeLabel = lang === 'ar' ? 'تاريخي' : 'Historical';
-        sourceLabel = 'Historical Archive';
-        const events = historicalRange
-          ? historicalRegion.events.filter((e) => {
-              const afterFrom = e.year > historicalRange.fromYear || (e.year === historicalRange.fromYear && e.month >= historicalRange.fromMonth);
-              const beforeTo = e.year < historicalRange.toYear || (e.year === historicalRange.toYear && e.month <= historicalRange.toMonth);
-              return afterFrom && beforeTo;
-            })
-          : historicalEventActive
-          ? historicalRegion.events.filter((e) => e.year === historicalEventActive.year && e.month === historicalEventActive.month)
-          : historicalRegion.events.filter((e) => e.year === historicalYear && e.month === historicalMonth);
+      const liveRegion = (data?.regions ?? []).reduce<any | null>((nearest, candidate) => {
+        if (!nearest) return candidate;
+        const nearestDistance = haversineKm(area.lat, area.lng, nearest.lat, nearest.lon);
+        const candidateDistance = haversineKm(area.lat, area.lng, candidate.lat, candidate.lon);
+        return candidateDistance < nearestDistance ? candidate : nearest;
+      }, null);
 
-        if (events.length > 0) {
-          overlayLevel = getMaxOverlayLevel(events.map(e => e.level));
-          depthCm = Math.max(...events.map(e => e.waterDepthCm));
-          precipitationValue = Math.max(...events.map(e => e.precipMm));
-          estimatedAreaKm2 = Math.max(
-            0.15,
-            Number((area.areaSqKm * clamp((historicalRegion.density * depthCm) / 55, 0.04, 0.88)).toFixed(2))
-          );
-          waterLabel = events.length > 1
-            ? (lang === 'ar' ? `أقصى حدث ضمن الفترة (${events.length})` : `Peak in selected range (${events.length})`)
-            : events[0].name;
-          severityLabel = overlayLevel === 'extreme'
-            ? (lang === 'ar' ? 'قصوى' : 'Extreme')
-            : overlayLevel === 'severe'
-            ? (lang === 'ar' ? 'شديدة' : 'Severe')
-            : overlayLevel === 'moderate'
-            ? (lang === 'ar' ? 'متوسطة' : 'Moderate')
-            : overlayLevel === 'minor'
-            ? (lang === 'ar' ? 'طفيفة' : 'Minor')
-            : (lang === 'ar' ? 'آمنة' : 'Safe');
-          alertLevel = toAlertLevel(overlayLevel);
-        }
-      } else if (liveRegion) {
-        dataModeLabel = lang === 'ar' ? 'حي' : 'Live';
-        sourceLabel = (liveRegion.waterAccumulation?.sources ?? ['Open-Meteo']).join(' · ');
-        const liveDepth = liveRegion.waterAccumulation?.estimatedDepthCm ?? Math.round(liveRegion.floodRisk * 0.8);
-        const liveArea = liveRegion.waterAccumulation?.estimatedAreaKm2 ?? Number((area.areaSqKm * clamp(liveRegion.floodRisk / 100, 0.02, 0.65)).toFixed(2));
-        precipitationValue = Math.max(liveRegion.currentPrecipitation, liveRegion.totalLast24h);
-        overlayLevel = liveRegion.waterAccumulation?.level && liveRegion.waterAccumulation.level !== 'none'
-          ? liveRegion.waterAccumulation.level as AdminOverlayLevel
-          : classifyOverlayLevel(liveDepth);
-        depthCm = liveDepth;
-        estimatedAreaKm2 = liveArea;
-        waterLabel = liveRegion.currentPrecipitation > 0
-          ? (lang === 'ar' ? 'تجمعات مائية حية' : 'Live surface water')
-          : (lang === 'ar' ? 'أثر تجمّع/تشبّع' : 'Retention / saturation');
-        severityLabel = liveRegion.alertLevel === 'critical'
-          ? (lang === 'ar' ? 'حرجة' : 'Critical')
-          : liveRegion.alertLevel === 'warning'
-          ? (lang === 'ar' ? 'تحذير' : 'Warning')
-          : liveRegion.alertLevel === 'watch'
-          ? (lang === 'ar' ? 'مراقبة' : 'Watch')
-          : (lang === 'ar' ? 'آمنة' : 'Safe');
-        alertLevel = liveRegion.alertLevel;
-      }
+      const liveSignal = liveRegion
+        ? buildAdminSignalFromLiveRegion(liveRegion, area.areaSqKm, lang)
+        : null;
+
+      const signal = historicalSignal ?? liveSignal ?? {
+        overlayLevel: 'safe' as AdminOverlayLevel,
+        depthCm: 0,
+        estimatedAreaKm2: 0,
+        precipitationValue: 0,
+        riskIndex: 0,
+        waterLabel: lang === 'ar' ? 'جاف' : 'Dry',
+        severityLabel: ADMIN_LEVEL_LABELS.safe[lang],
+        dataModeLabel: lang === 'ar' ? 'حي' : 'Live',
+        sourceLabel: 'Open-Meteo',
+        alertLevel: 'safe' as const,
+      };
 
       return {
         ...area,
         liveRegion,
         historicalRegion,
-        overlayLevel,
-        depthCm,
-        estimatedAreaKm2,
-        precipitationValue,
-        waterLabel,
-        severityLabel,
-        dataModeLabel,
-        sourceLabel,
-        alertLevel,
+        ...signal,
         polygon: buildAdministrativePolygon(area, administrativeAreas),
       };
     });
   }, [administrativeAreas, data, historicalMode, historicalRange, historicalEventActive, historicalYear, historicalMonth, lang]);
+
+  const officialDistrictSignals = useMemo(() => {
+    return buildAdministrativeFeatureSignals(
+      officialAdminGeoJson,
+      administrativeAreas,
+      data?.regions ?? [],
+      lang,
+      historicalMode,
+      historicalRange,
+      historicalEventActive,
+      historicalYear,
+      historicalMonth,
+    );
+  }, [officialAdminGeoJson, administrativeAreas, data, lang, historicalMode, historicalRange, historicalEventActive, historicalYear, historicalMonth]);
+
+  const officialCommunitySignals = useMemo(() => {
+    return buildAdministrativeFeatureSignals(
+      officialCommunityGeoJson,
+      administrativeAreas,
+      data?.regions ?? [],
+      lang,
+      historicalMode,
+      historicalRange,
+      historicalEventActive,
+      historicalYear,
+      historicalMonth,
+    );
+  }, [officialCommunityGeoJson, administrativeAreas, data, lang, historicalMode, historicalRange, historicalEventActive, historicalYear, historicalMonth]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1490,13 +1752,7 @@ export default function UnifiedMapPage() {
     const group = L.layerGroup();
 
     administrativeOverlayRegions.forEach((area) => {
-      const palette = area.overlayLevel === 'safe'
-        ? { fill: '#93C5FD', stroke: '#BFDBFE', text: '#E0F2FE' }
-        : {
-            fill: WATER_COLORS[area.overlayLevel]?.hex ?? WATER_COLORS.minor.hex,
-            stroke: WATER_COLORS[area.overlayLevel]?.stroke ?? WATER_COLORS.minor.stroke,
-            text: WATER_COLORS[area.overlayLevel]?.fill ?? WATER_COLORS.minor.fill,
-          };
+      const palette = ADMIN_OVERLAY_COLORS[area.overlayLevel] ?? ADMIN_OVERLAY_COLORS.safe;
 
       const baseFillOpacity = area.overlayLevel === 'extreme'
         ? 0.68
@@ -1534,12 +1790,28 @@ export default function UnifiedMapPage() {
     if (layerGroupsRef.current[key]) { layerGroupsRef.current[key].remove(); }
     if (!activeLayers.adminBoundaries || currentZoom < 11 || !officialAdminGeoJson) return;
 
+    const adminFillPane = map.getPane('official-admin-fill-pane') ?? map.createPane('official-admin-fill-pane');
+    adminFillPane.style.zIndex = '641';
+    adminFillPane.style.pointerEvents = 'none';
+
     const adminBoundaryPane = map.getPane('admin-boundary-pane') ?? map.createPane('admin-boundary-pane');
     adminBoundaryPane.style.zIndex = '642';
     adminBoundaryPane.style.pointerEvents = 'auto';
 
     const useCommunities = currentZoom >= 13.5 && !!officialCommunityGeoJson;
     const sourceGeoJson = useCommunities ? officialCommunityGeoJson : officialAdminGeoJson;
+    const signalMaps = useCommunities ? officialCommunitySignals : officialDistrictSignals;
+
+    const resolveFeatureSignal = (feature: any) => {
+      const props = feature?.properties ?? {};
+      const objectMatch = props.OBJECTID !== undefined && props.OBJECTID !== null
+        ? signalMaps.byObjectId[String(props.OBJECTID)]
+        : null;
+      const districtMatch = props.DISTRICTID !== undefined && props.DISTRICTID !== null
+        ? signalMaps.byDistrictId[String(props.DISTRICTID)]
+        : null;
+      return objectMatch ?? districtMatch ?? null;
+    };
 
     const boundaryWeight = useCommunities
       ? (isMobile ? 0.95 : 1.15)
@@ -1547,19 +1819,33 @@ export default function UnifiedMapPage() {
 
     const boundaryColor = useCommunities ? '#7DD3FC' : '#93C5FD';
     const boundaryOpacity = useCommunities ? 0.72 : 0.92;
-    const style = {
-      pane: 'admin-boundary-pane',
-      color: boundaryColor,
-      weight: boundaryWeight,
-      opacity: boundaryOpacity,
-      fillOpacity: 0,
-      dashArray: useCommunities ? undefined : (currentZoom >= 14 ? undefined : '3 4'),
-    };
-
     const group = L.geoJSON(sourceGeoJson, {
       pane: 'admin-boundary-pane',
-      style: () => style,
+      style: (feature) => {
+        const matched = resolveFeatureSignal(feature);
+        const overlayLevel: AdminOverlayLevel = matched?.signal.overlayLevel ?? 'safe';
+        const palette = ADMIN_OVERLAY_COLORS[overlayLevel] ?? ADMIN_OVERLAY_COLORS.safe;
+        const baseFillOpacity = overlayLevel === 'extreme'
+          ? 0.44
+          : overlayLevel === 'severe'
+          ? 0.34
+          : overlayLevel === 'moderate'
+          ? 0.24
+          : overlayLevel === 'minor'
+          ? 0.16
+          : 0.08;
+        return {
+          pane: 'admin-boundary-pane',
+          color: palette.stroke ?? boundaryColor,
+          weight: boundaryWeight,
+          opacity: boundaryOpacity,
+          fillColor: palette.fill,
+          fillOpacity: activeLayers.floodZones ? baseFillOpacity : 0,
+          dashArray: useCommunities ? undefined : (currentZoom >= 14 ? undefined : '3 4'),
+        };
+      },
       onEachFeature: (feature, layer) => {
+        const matched = resolveFeatureSignal(feature);
         const props = feature?.properties ?? {};
         const nameAr = props.NAMEARABIC ?? props.ARABIC_NAME ?? props.COMMUNITYNAMEARA ?? props.DISTRICTARA ?? 'منطقة إدارية';
         const nameEn = props.NAMEENGLISH ?? props.ENGLISH_NAME ?? props.COMMUNITYNAMEENG ?? props.DISTRICTNAMEENG ?? 'Administrative District';
@@ -1567,13 +1853,39 @@ export default function UnifiedMapPage() {
         const districtId = props.DISTRICTID ?? props.DISTRICTID_OID ?? props.OBJECTID ?? '—';
         const parentDistrict = props.DISTRICTNAMEENG ?? props.DISTRICTARA ?? props.NAMEENGLISH ?? props.NAMEARABIC ?? '—';
 
+        const signal = matched?.signal;
+        const tooltipOverlayLevel: AdminOverlayLevel = signal?.overlayLevel ?? 'safe';
+        const palette = ADMIN_OVERLAY_COLORS[tooltipOverlayLevel] ?? ADMIN_OVERLAY_COLORS.safe;
+        const severity = signal?.severityLabel ?? ADMIN_LEVEL_LABELS.safe[lang];
+        const riskIndex = signal?.riskIndex ?? 0;
+        const depthCm = signal?.depthCm ?? 0;
+        const precipMm = signal?.precipitationValue ?? 0;
+        const waterLabel = signal?.waterLabel ?? (lang === 'ar' ? 'لا توجد مياه مرصودة' : 'No detected water');
+        const sourceLabelResolved = signal?.sourceLabel ?? 'Open-Meteo';
+        const areaKm2 = signal?.estimatedAreaKm2 ?? 0;
+
         layer.bindTooltip(`
-          <div style="font-family:Tajawal,sans-serif;direction:rtl;min-width:240px;background:#0a0f1e;color:#e2e8f0;border-radius:10px;padding:12px;border:1px solid ${boundaryColor};">
+          <div style="font-family:Tajawal,sans-serif;direction:rtl;min-width:260px;background:#0a0f1e;color:#e2e8f0;border-radius:10px;padding:12px;border:1px solid ${palette.stroke};">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <div style="width:10px;height:10px;border-radius:50%;background:${boundaryColor};box-shadow:0 0 10px ${boundaryColor};"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:${palette.fill};box-shadow:0 0 10px ${palette.fill};"></div>
               <div>
-                <div style="font-size:14px;font-weight:800;color:#E0F2FE;">${nameAr}</div>
+                <div style="font-size:14px;font-weight:800;color:${palette.text};">${nameAr}</div>
                 <div style="font-size:10px;color:#94a3b8;">${nameEn}</div>
+              </div>
+              <div style="margin-right:auto;background:${palette.fill};border:1px solid ${palette.stroke};border-radius:999px;padding:3px 8px;font-size:10px;font-weight:700;color:${palette.text};">${severity}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;">
+              <div style="background:rgba(255,255,255,0.05);padding:6px;border-radius:6px;text-align:center;border:1px solid rgba(255,255,255,0.08);">
+                <div style="font-size:16px;font-weight:800;color:${palette.text};font-family:monospace;">${depthCm}</div>
+                <div style="font-size:8px;color:#94a3b8;margin-top:2px;">${lang === 'ar' ? 'سم ماء' : 'cm water'}</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05);padding:6px;border-radius:6px;text-align:center;border:1px solid rgba(255,255,255,0.08);">
+                <div style="font-size:16px;font-weight:800;color:${palette.text};font-family:monospace;">${riskIndex}%</div>
+                <div style="font-size:8px;color:#94a3b8;margin-top:2px;">${lang === 'ar' ? 'مؤشر الخطر' : 'Risk index'}</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05);padding:6px;border-radius:6px;text-align:center;border:1px solid rgba(255,255,255,0.08);">
+                <div style="font-size:16px;font-weight:800;color:${palette.text};font-family:monospace;">${areaKm2.toFixed(1)}</div>
+                <div style="font-size:8px;color:#94a3b8;margin-top:2px;">${lang === 'ar' ? 'كم² متأثر' : 'km² affected'}</div>
               </div>
             </div>
             <div style="font-size:9px;color:#cbd5e1;line-height:1.7;">
@@ -1581,7 +1893,10 @@ export default function UnifiedMapPage() {
               ${lang === 'ar' ? 'المعرف' : 'ID'}: ${districtId}<br/>
               ${lang === 'ar' ? 'مستوى الحدود' : 'Boundary level'}: ${useCommunities ? (lang === 'ar' ? 'Community' : 'Community') : (lang === 'ar' ? 'District' : 'District')}<br/>
               ${useCommunities ? `${lang === 'ar' ? 'المنطقة الأم' : 'Parent district'}: ${parentDistrict}<br/>` : ''}
-              ${lang === 'ar' ? 'نوع الطبقة' : 'Layer type'}: ${lang === 'ar' ? 'حدود إدارية رسمية' : 'Official administrative boundary'}
+              ${lang === 'ar' ? 'الهطول المرجعي' : 'Reference precipitation'}: ${precipMm.toFixed(1)} mm<br/>
+              ${lang === 'ar' ? 'وصف الحالة' : 'Status note'}: ${waterLabel}<br/>
+              ${lang === 'ar' ? 'المصدر' : 'Source'}: ${sourceLabelResolved}<br/>
+              ${lang === 'ar' ? 'نوع الطبقة' : 'Layer type'}: ${lang === 'ar' ? 'حدود إدارية رسمية ملوّنة ديناميكياً' : 'Official administrative boundary with dynamic fill'}
             </div>
           </div>
         `, { className: 'flood-popup', sticky: true, direction: 'top' });
@@ -1590,7 +1905,7 @@ export default function UnifiedMapPage() {
 
     group.addTo(map);
     layerGroupsRef.current[key] = group;
-  }, [activeLayers.adminBoundaries, officialAdminGeoJson, officialCommunityGeoJson, currentZoom, lang, isMobile]);
+  }, [activeLayers.adminBoundaries, activeLayers.floodZones, officialAdminGeoJson, officialCommunityGeoJson, officialDistrictSignals, officialCommunitySignals, currentZoom, lang, isMobile]);
 
   // ── Live Water Accumulation Layer (Hybrid: ERA5 + GloFAS + DEM) ──────────
   // Renders a circle for every region that has water accumulation detected.
