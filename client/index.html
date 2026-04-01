@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="theme-color" content="#0d1b2a" />
+    <title>FloodSat AI — منصة الرصد الذكي للفيضانات | أبوظبي</title>
+    <meta name="description" content="منصة متكاملة لرصد تجمعات مياه الأمطار والفيضانات في إمارة أبوظبي عبر الأقمار الصناعية والذكاء الاصطناعي" />
+
+    <!-- ══ CRITICAL: Force dark background BEFORE any JS/CSS loads ══
+         This prevents the white flash on iOS Safari even if CSS fails to load -->
+    <style>
+      html, body {
+        background-color: #0d1b2a !important;
+        color: #e8f4f8 !important;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+      #root {
+        background-color: #0d1b2a;
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+    </style>
+
+    <!-- Google Fonts — non-blocking load to prevent iOS Safari render block -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Space+Mono:wght@400;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" />
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Space+Mono:wght@400;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Space+Mono:wght@400;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" /></noscript>
+
+    <!-- Leaflet CSS — non-blocking -->
+    <link rel="preload" as="style" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /></noscript>
+
+    <!-- iOS Safari Polyfills — MUST run before any JS bundle -->
+    <script>
+      // Array.prototype.at — Safari < 15.4
+      if (!Array.prototype.at) {
+        Array.prototype.at = function(i) {
+          var n = this.length, r = i < 0 ? n + i : i;
+          return r >= 0 && r < n ? this[r] : undefined;
+        };
+      }
+      // String.prototype.at — Safari < 15.4
+      if (!String.prototype.at) {
+        String.prototype.at = function(i) {
+          var n = this.length, r = i < 0 ? n + i : i;
+          return r >= 0 && r < n ? this[r] : undefined;
+        };
+      }
+      // Object.hasOwn — Safari < 15.4
+      if (!Object.hasOwn) {
+        Object.hasOwn = function(obj, key) {
+          return Object.prototype.hasOwnProperty.call(obj, key);
+        };
+      }
+      // structuredClone — Safari < 15.4
+      if (typeof structuredClone === 'undefined') {
+        window.structuredClone = function(obj) {
+          return JSON.parse(JSON.stringify(obj));
+        };
+      }
+      // Array.prototype.findLast — Safari < 15.4
+      if (!Array.prototype.findLast) {
+        Array.prototype.findLast = function(fn) {
+          for (var i = this.length - 1; i >= 0; i--) {
+            if (fn(this[i], i, this)) return this[i];
+          }
+        };
+      }
+      // Array.prototype.findLastIndex — Safari < 15.4
+      if (!Array.prototype.findLastIndex) {
+        Array.prototype.findLastIndex = function(fn) {
+          for (var i = this.length - 1; i >= 0; i--) {
+            if (fn(this[i], i, this)) return i;
+          }
+          return -1;
+        };
+      }
+      // Array.prototype.toSorted — Safari < 16
+      if (!Array.prototype.toSorted) {
+        Array.prototype.toSorted = function(fn) {
+          return this.slice().sort(fn);
+        };
+      }
+      // Array.prototype.toReversed — Safari < 16
+      if (!Array.prototype.toReversed) {
+        Array.prototype.toReversed = function() {
+          return this.slice().reverse();
+        };
+      }
+      // Array.prototype.with — Safari < 16
+      if (!Array.prototype.with) {
+        Array.prototype.with = function(i, v) {
+          var a = this.slice(); a[i < 0 ? this.length + i : i] = v; return a;
+        };
+      }
+      // Promise.allSettled — Safari < 13
+      if (!Promise.allSettled) {
+        Promise.allSettled = function(promises) {
+          return Promise.all(promises.map(function(p) {
+            return Promise.resolve(p).then(
+              function(v) { return { status: 'fulfilled', value: v }; },
+              function(e) { return { status: 'rejected', reason: e }; }
+            );
+          }));
+        };
+      }
+      // globalThis — Safari < 12.1
+      if (typeof globalThis === 'undefined') {
+        window.globalThis = window;
+      }
+      // queueMicrotask — Safari < 12.1
+      if (typeof queueMicrotask === 'undefined') {
+        window.queueMicrotask = function(fn) { Promise.resolve().then(fn); };
+      }
+    </script>
+
+    <style>
+      /* Geological dark theme — Leaflet popup override */
+      .leaflet-popup-content-wrapper {
+        background: rgba(13, 27, 42, 0.96) !important;
+        backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(66,165,245,0.35) !important;
+        border-radius: 6px !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(66,165,245,0.08) !important;
+        color: #E8F4F8 !important;
+        padding: 0 !important;
+      }
+      .leaflet-popup-content { margin: 0 !important; }
+      .leaflet-popup-tip { background: rgba(13,27,42,0.96) !important; }
+      .leaflet-popup-close-button {
+        color: #546E7A !important;
+        font-size: 16px !important;
+        top: 6px !important;
+        right: 6px !important;
+      }
+      .leaflet-control-zoom a {
+        background: rgba(13,27,42,0.9) !important;
+        color: #90CAF9 !important;
+        border-color: rgba(66,165,245,0.2) !important;
+      }
+      .leaflet-control-zoom a:hover {
+        background: rgba(21,34,51,0.95) !important;
+        color: #42A5F5 !important;
+      }
+      .leaflet-bar { border: 1px solid rgba(66,165,245,0.2) !important; }
+
+      /* Instant loading screen */
+      #app-loader {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: #0d1b2a;
+        display: -webkit-flex;
+        display: flex;
+        -webkit-flex-direction: column;
+        flex-direction: column;
+        -webkit-align-items: center;
+        align-items: center;
+        -webkit-justify-content: center;
+        justify-content: center;
+        z-index: 9999;
+        font-family: system-ui, -apple-system, sans-serif;
+        -webkit-transition: opacity 0.4s ease;
+        transition: opacity 0.4s ease;
+      }
+      #app-loader.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .loader-spinner {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        border: 3px solid rgba(66,165,245,0.15);
+        border-top-color: #42a5f5;
+        -webkit-animation: loader-spin 0.9s linear infinite;
+        animation: loader-spin 0.9s linear infinite;
+        margin-bottom: 24px;
+      }
+      .loader-title {
+        color: #42a5f5;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        margin-bottom: 8px;
+      }
+      .loader-sub {
+        color: #546e7a;
+        font-size: 13px;
+        letter-spacing: 1px;
+      }
+      @-webkit-keyframes loader-spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+      @keyframes loader-spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Instant loading screen shown before React hydrates -->
+      <div id="app-loader">
+        <div class="loader-spinner"></div>
+        <div class="loader-title">FloodSat AI</div>
+        <div class="loader-sub">جارٍ التحميل...</div>
+      </div>
+    </div>
+    <script>
+      // ── Debug step tracker — shows last reached step on timeout ──
+      var _debugSteps = [];
+      window.__debugStep = function(step) {
+        _debugSteps.push(step);
+        // Update loader sub-text to show current step
+        var sub = document.querySelector('.loader-sub');
+        if (sub) sub.textContent = step;
+      };
+
+      // ── Hide loader — called from App.tsx useEffect after React mounts ──
+      window.__hideLoader = function() {
+        var el = document.getElementById('app-loader');
+        if (el) {
+          el.classList.add('hidden');
+          setTimeout(function() {
+            if (el.parentNode) el.parentNode.removeChild(el);
+          }, 600);
+        }
+      };
+
+      // ── Fallback: show diagnostic after 30s if React fails silently ──
+      var _loaderTimeout = setTimeout(function() {
+        var el = document.getElementById('app-loader');
+        if (el) {
+          var lastStep = _debugSteps.length > 0 ? _debugSteps[_debugSteps.length - 1] : 'لم يبدأ React';
+          var allSteps = _debugSteps.join(' → ');
+          // Show diagnostic with last reached step
+          el.innerHTML =
+            '<div style="padding:24px;max-width:90vw;text-align:center;">' +
+            '<div style="color:#ff6b35;font-size:18px;font-weight:bold;margin-bottom:12px;">⏱️ انتهت مهلة التحميل</div>' +
+            '<div style="color:#90caf9;font-size:12px;margin-bottom:8px;">آخر خطوة: ' + lastStep + '</div>' +
+            '<div style="color:#546e7a;font-size:11px;margin-bottom:16px;word-break:break-all;">' + allSteps + '</div>' +
+            '<button onclick="location.reload()" style="padding:10px 20px;background:#42a5f5;color:#0a1520;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">🔄 إعادة التحميل</button>' +
+            '</div>';
+          el.style.opacity = '1';
+          el.style.display = '-webkit-flex';
+          el.style.display = 'flex';
+        }
+      }, 30000);
+
+      // ── Visible error reporter for iOS Safari debugging ──
+      window.__showError = function(msg, src, line) {
+        clearTimeout(_loaderTimeout);
+        var loader = document.getElementById('app-loader');
+        if (!loader) {
+          // Create a new error overlay if loader was already removed
+          loader = document.createElement('div');
+          loader.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1b2a;display:-webkit-flex;display:flex;align-items:center;justify-content:center;z-index:99999;';
+          document.body.appendChild(loader);
+        }
+        loader.innerHTML =
+          '<div style="padding:24px;max-width:90vw;font-family:system-ui,-apple-system,sans-serif;">' +
+          '<div style="color:#ff6b35;font-size:18px;font-weight:bold;margin-bottom:12px;">⚠️ خطأ في التطبيق</div>' +
+          '<div style="color:#e8f4f8;font-size:12px;word-break:break-all;white-space:pre-wrap;background:#0a1520;padding:12px;border-radius:8px;margin-bottom:8px;max-height:200px;overflow:auto;">' + (msg || 'Unknown error') + '</div>' +
+          '<div style="color:#546e7a;font-size:11px;margin-bottom:12px;">' + (src || '') + (line ? ' line ' + line : '') + '</div>' +
+          '<button onclick="location.reload()" style="padding:10px 20px;background:#42a5f5;color:#0a1520;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;">🔄 إعادة التحميل</button>' +
+          '</div>';
+        loader.style.opacity = '1';
+        loader.style.display = '-webkit-flex';
+        loader.style.display = 'flex';
+      };
+
+      // ── Global error handlers ──
+      window.onerror = function(msg, src, line, col, err) {
+        var fullMsg = String(msg);
+        if (err && err.stack) fullMsg += '\n\nStack:\n' + err.stack.substring(0, 500);
+        window.__showError(fullMsg, src, line);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason;
+        var msg = reason
+          ? (reason.message || String(reason)) + (reason.stack ? '\n\nStack:\n' + String(reason.stack).substring(0, 400) : '')
+          : 'Unhandled Promise Rejection';
+        window.__showError('Promise Error: ' + msg, '', '');
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+    <script
+      defer
+      src="%VITE_ANALYTICS_ENDPOINT%/umami"
+      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%">
+    </script>
+  </body>
+</html>

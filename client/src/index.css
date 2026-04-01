@@ -1,0 +1,984 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   FloodSat AI — "Geological Strata" Design System
+   Philosophy: Organic Topographic Cartography + Field Operations Interface
+   ─────────────────────────────────────────────────────────────────────────
+   Layout:    Full-bleed map + floating glass panels (NO fixed sidebar)
+   Palette:   Deep ocean navy + geological earth tones + water blues
+   Type:      Playfair Display (headings) + Space Mono (data) + Noto Naskh Arabic
+   Motion:    Ripple, contour wave, rain particles, count-up
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius: 4px;
+
+  /* ── Geological Dark Palette — hex fallbacks first (iOS Safari <15.4 compat), then oklch ── */
+  --background:        #0d1b2a;   /* deep ocean — fallback */
+  --background:        oklch(0.12 0.025 240);
+  --foreground:        #e8f4f8;   /* ice white — fallback */
+  --foreground:        oklch(0.92 0.008 200);
+  --card:              #152233;   /* fallback */
+  --card:              oklch(0.16 0.022 235);
+  --card-foreground:   #e6f0f6;   /* fallback */
+  --card-foreground:   oklch(0.90 0.008 200);
+  --popover:           #121f30;   /* fallback */
+  --popover:           oklch(0.14 0.024 237);
+  --popover-foreground: #e6f0f6;  /* fallback */
+  --popover-foreground: oklch(0.90 0.008 200);
+  --primary:           #42a5f5;   /* water blue — fallback */
+  --primary:           oklch(0.65 0.18 210);
+  --primary-foreground: #0a1520;  /* fallback */
+  --primary-foreground: oklch(0.10 0.02 240);
+  --secondary:         #1e3048;   /* fallback */
+  --secondary:         oklch(0.20 0.020 230);
+  --secondary-foreground: #ccd9e0; /* fallback */
+  --secondary-foreground: oklch(0.80 0.010 200);
+  --muted:             #1a2c40;   /* fallback */
+  --muted:             oklch(0.18 0.018 235);
+  --muted-foreground:  #6b8fa8;   /* fallback */
+  --muted-foreground:  oklch(0.55 0.018 220);
+  --accent:            #4dd0e1;   /* teal — fallback */
+  --accent:            oklch(0.68 0.16 195);
+  --accent-foreground: #0a1520;   /* fallback */
+  --accent-foreground: oklch(0.10 0.02 240);
+  --destructive:       #ff6b35;   /* lava orange — fallback */
+  --destructive:       oklch(0.62 0.22 30);
+  --border:            #1e3048;   /* fallback */
+  --border:            oklch(0.22 0.020 235);
+  --input:             #1e3048;   /* fallback */
+  --input:             oklch(0.20 0.020 235);
+  --ring:              #42a5f5;   /* fallback */
+  --ring:              oklch(0.65 0.18 210);
+}
+/* ── iOS Safari <15.4 fallback: define --background etc. as hex in :root ── */
+:root {
+  --background:        #0d1b2a;
+  --foreground:        #e8f4f8;
+  --card:              #152233;
+  --card-foreground:   #e6f0f6;
+  --popover:           #121f30;
+  --popover-foreground: #e6f0f6;
+  --primary:           #42a5f5;
+  --primary-foreground: #0a1520;
+  --secondary:         #1e3048;
+  --secondary-foreground: #ccd9e0;
+  --muted:             #1a2c40;
+  --muted-foreground:  #6b8fa8;
+  --accent:            #4dd0e1;
+  --accent-foreground: #0a1520;
+  --destructive:       #ff6b35;
+  --border:            #1e3048;
+  --input:             #1e3048;
+  --ring:              #42a5f5;
+}
+/* Override with oklch for browsers that support it (Safari 15.4+, Chrome 111+) */
+@supports (color: oklch(0 0 0)) {
+  :root {
+    --background:        oklch(0.12 0.025 240);
+    --foreground:        oklch(0.92 0.008 200);
+    --card:              oklch(0.16 0.022 235);
+    --card-foreground:   oklch(0.90 0.008 200);
+    --popover:           oklch(0.14 0.024 237);
+    --popover-foreground: oklch(0.90 0.008 200);
+    --primary:           oklch(0.65 0.18 210);
+    --primary-foreground: oklch(0.10 0.02 240);
+    --secondary:         oklch(0.20 0.020 230);
+    --secondary-foreground: oklch(0.80 0.010 200);
+    --muted:             oklch(0.18 0.018 235);
+    --muted-foreground:  oklch(0.55 0.018 220);
+    --accent:            oklch(0.68 0.16 195);
+    --accent-foreground: oklch(0.10 0.02 240);
+    --destructive:       oklch(0.62 0.22 30);
+    --border:            oklch(0.22 0.020 235);
+    --input:             oklch(0.20 0.020 235);
+    --ring:              oklch(0.65 0.18 210);
+  }
+}
+@layer base {
+  * { border-color: var(--color-border); }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+  .flex { min-height: 0; min-width: 0; }
+  @media (min-width: 1024px) {
+    .container { max-width: 1400px; }
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   ROOT DESIGN TOKENS
+   ══════════════════════════════════════════════════════ */
+:root {
+  /* ── Deep Ocean Palette ── */
+  --bg-primary:      #0D1B2A;   /* deep ocean night */
+  --bg-secondary:    #152233;   /* wet slate */
+  --bg-tertiary:     #1B2838;   /* dark tidal */
+  --bg-card:         rgba(21, 34, 51, 0.85);
+  --bg-card-solid:   #152233;
+  --bg-glass:        rgba(13, 27, 42, 0.72);
+  --bg-glass-light:  rgba(21, 34, 51, 0.60);
+
+  /* ── Water Blues ── */
+  --water-deep:      #0A2744;
+  --water-mid:       #1565C0;
+  --water-bright:    #42A5F5;
+  --water-light:     #90CAF9;
+  --water-foam:      #B3E5FC;
+
+  /* ── Earth Tones ── */
+  --earth-dark:      #3E2723;
+  --earth-mid:       #6D4C41;
+  --earth-sand:      #8D6E63;
+  --earth-dry:       #A1887F;
+
+  /* ── Semantic ── */
+  --danger:          #FF6B35;   /* lava orange */
+  --danger-dim:      rgba(255, 107, 53, 0.15);
+  --warning:         #FFB300;   /* amber ore */
+  --warning-dim:     rgba(255, 179, 0, 0.15);
+  --safe:            #43A047;   /* forest green */
+  --safe-dim:        rgba(67, 160, 71, 0.15);
+  --info:            #42A5F5;   /* water blue */
+  --info-dim:        rgba(66, 165, 245, 0.15);
+  --critical:        #E53935;   /* deep red */
+  --critical-dim:    rgba(229, 57, 53, 0.15);
+
+  /* ── Contour Lines ── */
+  --contour:         rgba(84, 110, 122, 0.35);
+  --contour-bright:  rgba(66, 165, 245, 0.50);
+
+  /* ── Borders ── */
+  --border-color:    rgba(66, 165, 245, 0.12);
+  --border-active:   rgba(66, 165, 245, 0.45);
+  --border-glow:     rgba(66, 165, 245, 0.70);
+
+  /* ── Text ── */
+  --text-primary:    #E8F4F8;
+  --text-secondary:  #90CAF9;
+  --text-muted:      #546E7A;
+  --text-data:       #4DD0E1;   /* teal for numbers */
+
+  /* ── Cyan alias (backward compat) ── */
+  --cyan:            #42A5F5;
+  --cyan-dim:        rgba(66, 165, 245, 0.12);
+  --cyan-glow:       0 0 20px rgba(66, 165, 245, 0.30);
+
+  /* ── Semantic aliases ── */
+  --green:           var(--safe);
+  --green-dim:       var(--safe-dim);
+  --amber:           var(--warning);
+  --amber-dim:       var(--warning-dim);
+  --red:             var(--danger);
+  --red-dim:         var(--danger-dim);
+  --teal:            #4DD0E1;
+  --teal-dim:        rgba(77, 208, 225, 0.12);
+
+  /* Scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(66,165,245,0.25) transparent;
+}
+
+/* ══════════════════════════════════════════════════════
+   RESET & BASE
+   ══════════════════════════════════════════════════════ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  direction: ltr;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Noto Naskh Arabic', sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Typography ── */
+h1, h2, h3 {
+  font-family: 'Playfair Display', 'Noto Naskh Arabic', serif;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+h1 { font-size: 2rem;   font-weight: 700; line-height: 1.2; }
+h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
+h3 { font-size: 1.1rem; font-weight: 600; line-height: 1.4; }
+h4 { font-size: 0.9rem; font-weight: 600; line-height: 1.4; font-family: 'Inter', sans-serif; }
+p  { font-size: 0.875rem; line-height: 1.7; }
+small { font-size: 0.75rem; line-height: 1.5; }
+
+/* Data numbers — Space Mono */
+.font-data, .font-mono {
+  font-family: 'Space Mono', 'JetBrains Mono', monospace !important;
+  letter-spacing: -0.03em;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(66,165,245,0.20); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(66,165,245,0.40); }
+
+/* ══════════════════════════════════════════════════════
+   KEYFRAME ANIMATIONS
+   ══════════════════════════════════════════════════════ */
+
+/* Ripple — water accumulation zones */
+@keyframes ripple {
+  0%   { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(3.0); opacity: 0; }
+}
+
+/* Contour wave — topographic lines */
+@keyframes contour-wave {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 60; }
+}
+
+/* Rain particles */
+@keyframes rain-fall {
+  0%   { transform: translateY(-20px) translateX(0); opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.3; }
+  100% { transform: translateY(100vh) translateX(-15px); opacity: 0; }
+}
+
+/* Count-up entrance */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Slide in from bottom */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Slide in from right */
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Pulse glow */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(66,165,245,0.3); }
+  50%       { box-shadow: 0 0 24px rgba(66,165,245,0.7); }
+}
+
+/* Blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* Shimmer */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Pulse ring */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+/* Float */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+/* ══════════════════════════════════════════════════════
+   UTILITY CLASSES
+   ══════════════════════════════════════════════════════ */
+
+/* ── Status ── */
+.status-safe    { color: var(--safe); }
+.status-warning { color: var(--warning); }
+.status-danger  { color: var(--danger); }
+.status-active  { color: var(--water-bright); }
+.status-critical{ color: var(--critical); }
+
+/* ── Glow text ── */
+.glow-cyan       { color: var(--water-bright); text-shadow: 0 0 12px rgba(66,165,245,0.5); }
+.glow-text-cyan  { color: var(--water-bright); font-weight: 600; }
+.glow-text-amber { color: var(--warning); font-weight: 600; }
+.glow-text-red   { color: var(--danger); font-weight: 600; }
+.glow-text-green { color: var(--safe); font-weight: 600; }
+
+/* ── Glass card — core component ── */
+.card-dark {
+  background: rgba(21, 34, 51, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(66,165,245,0.12);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+.card-dark:hover {
+  border-color: rgba(66,165,245,0.28);
+  box-shadow: 0 6px 28px rgba(66,165,245,0.10);
+}
+
+/* ── Floating panel — replaces sidebar ── */
+.float-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+/* ── Bottom sheet ── */
+.bottom-sheet {
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-top: 1px solid var(--border-active);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+  animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Hexagonal chip ── */
+.hex-chip {
+  clip-path: polygon(10% 0%, 90% 0%, 100% 50%, 90% 100%, 10% 100%, 0% 50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* ── Contour divider ── */
+.contour-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--contour-bright), transparent);
+  margin: 12px 0;
+}
+
+/* ── Ripple element ── */
+.ripple-zone {
+  position: relative;
+}
+.ripple-zone::before,
+.ripple-zone::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--water-bright);
+  animation: ripple 3s ease-out infinite;
+}
+.ripple-zone::after {
+  animation-delay: 1.5s;
+}
+
+/* ── Pulse dot ── */
+.pulse-dot {
+  position: relative;
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* ── Shimmer loading ── */
+.shimmer {
+  background: linear-gradient(90deg,
+    rgba(21,34,51,0.8) 25%,
+    rgba(66,165,245,0.08) 50%,
+    rgba(21,34,51,0.8) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite;
+}
+
+/* ── Progress bar ── */
+.progress-bar {
+  height: 3px;
+  background: rgba(66,165,245,0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(90deg, var(--water-mid), var(--water-bright));
+}
+
+/* ── Alert banners ── */
+.alert-critical {
+  background: linear-gradient(135deg, rgba(229,57,53,0.12), rgba(229,57,53,0.04));
+  border-right: 3px solid var(--critical);
+  animation: blink 2.5s ease-in-out infinite;
+}
+.alert-warning {
+  background: linear-gradient(135deg, rgba(255,179,0,0.10), rgba(255,179,0,0.03));
+  border-right: 3px solid var(--warning);
+}
+.alert-info {
+  background: linear-gradient(135deg, rgba(66,165,245,0.10), rgba(66,165,245,0.03));
+  border-right: 3px solid var(--water-bright);
+}
+
+/* ══════════════════════════════════════════════════════
+   LAYOUT COMPONENTS
+   ══════════════════════════════════════════════════════ */
+
+/* ── Topbar — floating glass ── */
+.topnav {
+  background: rgba(13, 27, 42, 0.88);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 20px rgba(0,0,0,0.4);
+}
+
+/* ── Sidebar — floating glass panel (right side) ── */
+.sidebar {
+  background: rgba(13, 27, 42, 0.92);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 32px rgba(0,0,0,0.5);
+}
+
+/* ── Background: topographic contour texture ── */
+.geo-bg {
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(21,101,192,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(66,165,245,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, rgba(13,27,42,0.9) 0%, transparent 70%);
+}
+
+/* ── Rain canvas overlay ── */
+.rain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.12;
+}
+
+/* ══════════════════════════════════════════════════════
+   MAP OVERRIDES
+   ══════════════════════════════════════════════════════ */
+.leaflet-container {
+  background: #0A1628 !important;
+  font-family: 'Noto Naskh Arabic', sans-serif;
+}
+.leaflet-tile-pane {
+  filter: saturate(0.7) brightness(0.75) hue-rotate(5deg);
+}
+
+/* Leaflet popup — geological style */
+.leaflet-popup-content-wrapper {
+  background: rgba(13, 27, 42, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--border-active) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(66,165,245,0.1) !important;
+  color: var(--text-primary) !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content { margin: 0 !important; }
+.leaflet-popup-tip { background: rgba(13,27,42,0.95) !important; }
+.leaflet-popup-close-button { color: var(--text-muted) !important; }
+
+/* ══════════════════════════════════════════════════════
+   RECHARTS OVERRIDES
+   ══════════════════════════════════════════════════════ */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(66,165,245,0.07) !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgba(13,27,42,0.95) !important;
+  border: 1px solid var(--border-active) !important;
+  border-radius: 6px !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+/* ══════════════════════════════════════════════════════
+   ANIMATION HELPERS
+   ══════════════════════════════════════════════════════ */
+.animate-count-up { animation: count-up 0.8s cubic-bezier(0.16,1,0.3,1) forwards; }
+.animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16,1,0.3,1) forwards; }
+.animate-slide-in-right { animation: slide-in-right 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
+.animate-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-blink { animation: blink 2.5s ease-in-out infinite; }
+
+/* ══════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  #main-content { margin-right: 0 !important; padding: 12px !important; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.2rem; }
+}
+
+/* ══════════════════════════════════════════════════════
+   ADEO LIGHT THEME — Abu Dhabi Executive Office
+   Visual identity: royal blue (#003366) + gold (#C8A84B) + pure white
+   ══════════════════════════════════════════════════════ */
+[data-theme="adeo-light"] {
+  /* ── ADEO Palette ── */
+  --bg-primary:      #F4F6FA;
+  --bg-secondary:    #EAEFF7;
+  --bg-tertiary:     #DDE5F0;
+  --bg-card:         rgba(255, 255, 255, 0.95);
+  --bg-card-solid:   #FFFFFF;
+  --bg-glass:        rgba(255, 255, 255, 0.88);
+  --bg-glass-light:  rgba(244, 246, 250, 0.80);
+
+  /* ── ADEO Blues ── */
+  --water-deep:      #001A40;
+  --water-mid:       #003366;
+  --water-bright:    #0055A5;
+  --water-light:     #4A90D9;
+  --water-foam:      #B8D4F0;
+
+  /* ── ADEO Gold ── */
+  --adeo-gold:       #C8A84B;
+  --adeo-gold-light: #E8C96A;
+  --adeo-gold-dim:   rgba(200, 168, 75, 0.15);
+
+  /* ── Semantic ── */
+  --danger:          #C0392B;
+  --danger-dim:      rgba(192, 57, 43, 0.12);
+  --warning:         #E67E22;
+  --warning-dim:     rgba(230, 126, 34, 0.12);
+  --safe:            #27AE60;
+  --safe-dim:        rgba(39, 174, 96, 0.12);
+  --info:            #0055A5;
+  --info-dim:        rgba(0, 85, 165, 0.10);
+  --critical:        #922B21;
+  --critical-dim:    rgba(146, 43, 33, 0.12);
+
+  /* ── Borders ── */
+  --border-color:    rgba(0, 51, 102, 0.15);
+  --border-active:   rgba(0, 51, 102, 0.40);
+  --border-glow:     rgba(0, 51, 102, 0.60);
+  --contour:         rgba(0, 51, 102, 0.15);
+  --contour-bright:  rgba(0, 85, 165, 0.40);
+
+  /* ── Text ── */
+  --text-primary:    #0D1B2A;
+  --text-secondary:  #003366;
+  --text-muted:      #6B7C93;
+  --text-data:       #0055A5;
+
+  /* ── Aliases ── */
+  --cyan:            #0055A5;
+  --cyan-dim:        rgba(0, 85, 165, 0.10);
+  --cyan-glow:       0 0 20px rgba(0, 85, 165, 0.20);
+  --green:           var(--safe);
+  --green-dim:       var(--safe-dim);
+  --amber:           var(--warning);
+  --amber-dim:       var(--warning-dim);
+  --red:             var(--danger);
+  --red-dim:         var(--danger-dim);
+  --teal:            #1A7FC1;
+  --teal-dim:        rgba(26, 127, 193, 0.12);
+
+  scrollbar-color: rgba(0,51,102,0.25) transparent;
+}
+
+/* ADEO Light — component overrides */
+[data-theme="adeo-light"] body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="adeo-light"] .topnav {
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom: 2px solid #003366;
+  box-shadow: 0 2px 16px rgba(0, 51, 102, 0.12);
+}
+
+[data-theme="adeo-light"] .sidebar {
+  background: rgba(255, 255, 255, 0.97);
+  border-left: 2px solid rgba(0, 51, 102, 0.15);
+  box-shadow: -4px 0 24px rgba(0, 51, 102, 0.08);
+}
+
+[data-theme="adeo-light"] .card-dark {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 51, 102, 0.12);
+  box-shadow: 0 2px 12px rgba(0, 51, 102, 0.06);
+}
+
+[data-theme="adeo-light"] .card-dark:hover {
+  border-color: rgba(0, 51, 102, 0.28);
+  box-shadow: 0 6px 24px rgba(0, 51, 102, 0.10);
+}
+
+[data-theme="adeo-light"] .geo-bg {
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(0,51,102,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(200,168,75,0.04) 0%, transparent 50%);
+}
+
+[data-theme="adeo-light"] .grid-bg {
+  background-color: var(--bg-primary);
+  background-image:
+    linear-gradient(rgba(0,51,102,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,51,102,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+[data-theme="adeo-light"] .shimmer {
+  background: linear-gradient(90deg,
+    rgba(244,246,250,0.8) 25%,
+    rgba(0,85,165,0.06) 50%,
+    rgba(244,246,250,0.8) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite;
+}
+
+[data-theme="adeo-light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,51,102,0.20);
+}
+[data-theme="adeo-light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,51,102,0.40);
+}
+
+/* ══════════════════════════════════════════════════════
+   LTR SUPPORT — English layout direction
+   ══════════════════════════════════════════════════════ */
+[dir="ltr"] {
+  direction: ltr;
+  font-family: 'Inter', 'Space Mono', sans-serif;
+}
+
+[dir="rtl"] {
+  direction: rtl;
+  font-family: 'Noto Naskh Arabic', 'Inter', sans-serif;
+}
+
+[dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3 {
+  font-family: 'Noto Naskh Arabic', 'Playfair Display', serif;
+}
+
+[dir="ltr"] h1, [dir="ltr"] h2, [dir="ltr"] h3 {
+  font-family: 'Playfair Display', serif;
+}
+
+[dir="ltr"] .sidebar {
+  border-left: none;
+  border-right: 1px solid var(--border-color);
+  right: auto;
+  left: 0;
+  box-shadow: 4px 0 32px rgba(0,0,0,0.3);
+}
+
+[dir="rtl"] .sidebar {
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+  left: auto;
+  right: 0;
+  box-shadow: -4px 0 32px rgba(0,0,0,0.3);
+}
+
+[dir="ltr"] .topnav .brand-block {
+  right: auto;
+  left: 0;
+  border-left: none;
+  border-right: 1px solid var(--border-color);
+}
+
+/* ── Print / PDF Export Styles ─────────────────────────────────────────────── */
+@media print {
+  /* Hide navigation and control elements */
+  .sidebar,
+  .topnav,
+  nav,
+  [data-no-print],
+  button:not([data-print-keep]) {
+    display: none !important;
+  }
+
+  /* Adjust background for printing */
+  body {
+    background: white !important;
+    color: #111 !important;
+    font-size: 12px !important;
+  }
+
+  /* Remove shadows and transparent borders */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Ensure colors are visible */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  color-adjust: exact;
+
+  /* Adjust layout */
+  .main-content,
+  main,
+  [class*="content"] {
+    margin: 0 !important;
+    padding: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* A4 page */
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
+
+  /* Prevent elements from breaking across pages */
+  .card,
+  [class*="card"],
+  table {
+    page-break-inside: avoid;
+  }
+}
+
+/* ─── Smart Lens / Camera Animations ─────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes scanLine {
+  0%   { top: 0%; opacity: 1; }
+  50%  { top: 100%; opacity: 0.6; }
+  100% { top: 0%; opacity: 1; }
+}
+@keyframes radarSweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes radarPing {
+  0%   { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+@keyframes liveRecord {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+@keyframes geofencePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(96,165,250,0.5); }
+  70%  { box-shadow: 0 0 0 20px rgba(96,165,250,0); }
+  100% { box-shadow: 0 0 0 0 rgba(96,165,250,0); }
+}
+@keyframes waterLevel {
+  0%   { height: 0%; }
+  100% { height: var(--water-level, 60%); }
+}
+@keyframes compassNeedle {
+  from { transform: rotate(var(--compass-from, 0deg)); }
+  to   { transform: rotate(var(--compass-to, 45deg)); }
+}
+.animate-spin { animation: spin 0.8s linear infinite; }
+.animate-scan { animation: scanLine 2s ease-in-out infinite; }
+.animate-radar { animation: radarSweep 3s linear infinite; }
+.animate-live  { animation: liveRecord 1s ease-in-out infinite; }
+.animate-geofence { animation: geofencePulse 2s ease-out infinite; }
+
+/* ── Camera capture flash effect ─────────────────────────────────────────── */
+@keyframes captureFlashAnim {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE STYLES — FloodSat AI
+   Breakpoint: 768px (tablet), 480px (phone)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Prevent horizontal scroll on all devices */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Touch-friendly tap targets */
+@media (max-width: 768px) {
+  button, [role="button"] {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Recharts charts: reduce font sizes on mobile */
+  .recharts-text {
+    font-size: 9px !important;
+  }
+
+  /* Leaflet map controls: larger touch targets */
+  .leaflet-control-zoom a {
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+  }
+
+  /* Table horizontal scroll */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent text overflow in cards */
+  .card-value {
+    font-size: clamp(1.2rem, 5vw, 2rem) !important;
+  }
+
+  /* Sidebar: full width on mobile when open */
+  .sidebar-mobile-open {
+    width: 100vw !important;
+    max-width: 280px;
+  }
+
+  /* Hide decorative elements on mobile to save space */
+  .decorative-hex, .decorative-contour {
+    display: none !important;
+  }
+
+  /* Compact spacing for all cards on mobile */
+  [data-mobile-compact] {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  /* Charts: ensure minimum height */
+  .recharts-responsive-container {
+    min-height: 160px;
+  }
+
+  /* Alert ticker: smaller font */
+  .alert-ticker-text {
+    font-size: 10px !important;
+  }
+
+  /* Modal/Sheet: full screen on mobile */
+  [data-radix-dialog-content] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Tooltip portal: constrain to viewport */
+  [data-tooltip-portal] {
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  /* Navigation items: larger touch targets */
+  nav a, nav button {
+    padding: 10px 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Phone: even more compact */
+  h1 { font-size: 1.3rem !important; }
+  h2 { font-size: 1.1rem !important; }
+  h3 { font-size: 1rem !important; }
+
+  /* KPI values: scale down on very small screens */
+  .kpi-value {
+    font-size: clamp(1.5rem, 8vw, 2.5rem) !important;
+  }
+
+  /* Hide secondary info on very small screens */
+  .hide-on-phone {
+    display: none !important;
+  }
+
+  /* Full-width buttons on phone */
+  .btn-full-mobile {
+    width: 100% !important;
+  }
+
+  /* Recharts: even smaller */
+  .recharts-text {
+    font-size: 8px !important;
+  }
+}
+
+/* Landscape phone: adjust heights */
+@media (max-width: 768px) and (orientation: landscape) {
+  .map-container {
+    height: calc(100vh - 56px) !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print { display: none !important; }
+  .topnav, .sidebar { display: none !important; }
+  main { margin: 0 !important; padding: 0 !important; }
+}
