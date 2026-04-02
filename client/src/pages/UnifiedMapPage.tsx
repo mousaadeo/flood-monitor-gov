@@ -1741,7 +1741,7 @@ export default function UnifiedMapPage() {
     if (!map || !L) return;
     const key = 'adminRegionsFill';
     if (layerGroupsRef.current[key]) { layerGroupsRef.current[key].remove(); }
-    if (!activeLayers.floodZones || currentZoom < 11) return;
+    if (!activeLayers.floodZones || activeLayers.adminBoundaries || currentZoom < 11) return;
 
     const adminFillPane = map.getPane('admin-fill-pane') ?? map.createPane('admin-fill-pane');
     adminFillPane.style.zIndex = '640';
