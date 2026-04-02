@@ -204,6 +204,104 @@ const ADMIN_LEVEL_LABELS: Record<AdminOverlayLevel, { ar: string; en: string }> 
   extreme: { ar: 'شديد جداً', en: 'Severe' },
 };
 
+const WATER_SATELLITE_STYLE: Record<Exclude<keyof typeof WATER_COLORS, 'none'>, {
+  fillColor: string;
+  edgeColor: string;
+  washColor: string;
+  fillOpacity: number;
+  washOpacity: number;
+  edgeOpacity: number;
+  edgeWeight: number;
+  scale: number;
+}> = {
+  trace: {
+    fillColor: '#74E6DF',
+    edgeColor: '#8EF3EC',
+    washColor: '#A3F7F0',
+    fillOpacity: 0.10,
+    washOpacity: 0.045,
+    edgeOpacity: 0.12,
+    edgeWeight: 0.20,
+    scale: 1.02,
+  },
+  minor: {
+    fillColor: '#57DED4',
+    edgeColor: '#72ECE2',
+    washColor: '#95F5EC',
+    fillOpacity: 0.14,
+    washOpacity: 0.060,
+    edgeOpacity: 0.14,
+    edgeWeight: 0.22,
+    scale: 1.05,
+  },
+  moderate: {
+    fillColor: '#32D0C7',
+    edgeColor: '#4BE1D7',
+    washColor: '#79EEE5',
+    fillOpacity: 0.18,
+    washOpacity: 0.075,
+    edgeOpacity: 0.16,
+    edgeWeight: 0.26,
+    scale: 1.08,
+  },
+  severe: {
+    fillColor: '#19BCBA',
+    edgeColor: '#38D4D0',
+    washColor: '#6EEDE5',
+    fillOpacity: 0.22,
+    washOpacity: 0.095,
+    edgeOpacity: 0.18,
+    edgeWeight: 0.30,
+    scale: 1.12,
+  },
+  extreme: {
+    fillColor: '#0EA5A8',
+    edgeColor: '#2AC5C9',
+    washColor: '#63E7E1',
+    fillOpacity: 0.26,
+    washOpacity: 0.115,
+    edgeOpacity: 0.22,
+    edgeWeight: 0.36,
+    scale: 1.16,
+  },
+};
+
+function getSatelliteWaterStyle(level: keyof typeof WATER_COLORS) {
+  return WATER_SATELLITE_STYLE[(level === 'none' ? 'trace' : level) as Exclude<keyof typeof WATER_COLORS, 'none'>] ?? WATER_SATELLITE_STYLE.minor;
+}
+
+function getWaterShapeVertexCount(areaKm2: number) {
+  if (areaKm2 >= 40) return 44;
+  if (areaKm2 >= 15) return 38;
+  if (areaKm2 >= 4) return 34;
+  return 30;
+}
+
+function makeOrganicWaterPolygon(cLat: number, cLon: number, rM: number, vertices: number, seed: number): [number, number][] {
+  const mToLat = (m: number) => m / 111320;
+  const mToLng = (m: number) => m / (111320 * Math.cos(cLat * Math.PI / 180));
+  const pts: [number, number][] = [];
+
+  for (let i = 0; i < vertices; i++) {
+    const angle = (i / vertices) * Math.PI * 2;
+    const waveA = Math.sin(seed * 1.37 + angle * 1.9);
+    const waveB = Math.cos(seed * 0.91 + angle * 3.2);
+    const waveC = Math.sin(seed * 2.11 + angle * 5.1);
+    const jitter = 0.90 + waveA * 0.05 + waveB * 0.04 + waveC * 0.025;
+    const elongationX = 1 + 0.08 * Math.sin(seed * 0.73 + angle * 0.8);
+    const elongationY = 0.92 + 0.07 * Math.cos(seed * 0.59 + angle * 0.7);
+    const rx = rM * jitter * elongationX;
+    const ry = rM * jitter * elongationY;
+
+    pts.push([
+      cLat + mToLat(Math.sin(angle) * ry),
+      cLon + mToLng(Math.cos(angle) * rx),
+    ]);
+  }
+
+  return pts;
+}
+
 const DISTRICT_NAME_ALIASES: Record<string, string[]> = {
   'RAWDAT AL REEF': ['AL REEF', 'AL REEF DOWNTOWN', 'ROWDAT AL REEF'],
   'SHAKHBOUT CITY': ['SHAKHBOUT CITY', 'KHALIFA CITY B', 'KHALIFA CITY B'],
@@ -1936,56 +2034,35 @@ export default function UnifiedMapPage() {
       // ✅ Skip regions outside Abu Dhabi land boundary (islands in Gulf, sea areas)
       if (!isInsideAbuDhabi(lat, lon)) return;
 
-      // Radius based on estimated area (min 500m, max 8km)
-      const radiusM = Math.max(500, Math.min(8000, Math.sqrt(acc.estimatedAreaKm2 * 1_000_000 / Math.PI)));
-
-      // ── Build organic irregular polygon (replaces perfect circle) ──────────
-      // Converts a radius in meters to approximate lat/lng degrees at this location
-      const mToLat = (m: number) => m / 111320;
-      const mToLng = (m: number) => m / (111320 * Math.cos(lat * Math.PI / 180));
-      // Deterministic seed per region for stable shape across renders
+      // Radius based on estimated area, then expanded slightly to resemble flatter satellite-observed pooling patches
+      const baseRadiusM = Math.max(500, Math.min(8000, Math.sqrt(acc.estimatedAreaKm2 * 1_000_000 / Math.PI)));
+      const satelliteStyle = getSatelliteWaterStyle(acc.level as keyof typeof WATER_COLORS);
+      const radiusM = baseRadiusM * satelliteStyle.scale;
       const shapeSeed = lat * 1000 + lon;
-      // Generate N perturbed radial points for an organic polygon shape
-      function makeOrganicPoly(cLat: number, cLon: number, rM: number, N: number, s: number): [number, number][] {
-        const pts: [number, number][] = [];
-        for (let i = 0; i < N; i++) {
-          const angle = (i / N) * Math.PI * 2;
-          // Softer per-vertex jitter to keep water patches organic without looking spiky/heavy
-          const jitter = 0.80 + 0.20 * Math.abs(Math.sin(s * 17.3 + i * 2.39 + angle));
-          // Gentler elongation for a smoother flooded-area silhouette
-          const rx = rM * jitter * (1.0 + 0.10 * Math.sin(s * 7.1));
-          const ry = rM * jitter * (0.86 + 0.10 * Math.cos(s * 5.3));
-          pts.push([
-            cLat + mToLat(Math.sin(angle) * ry),
-            cLon + mToLng(Math.cos(angle) * rx),
-          ]);
-        }
-        return pts;
-      }
-      const polyPts = makeOrganicPoly(lat, lon, radiusM, 28, shapeSeed);
-      const outerPolyPts = makeOrganicPoly(lat, lon, radiusM * 1.22, 28, shapeSeed + 0.5);
+      const vertexCount = getWaterShapeVertexCount(acc.estimatedAreaKm2);
+      const polyPts = makeOrganicWaterPolygon(lat, lon, radiusM, vertexCount, shapeSeed);
+      const outerPolyPts = makeOrganicWaterPolygon(lat, lon, radiusM * 1.22, vertexCount, shapeSeed + 0.37);
+      const innerPolyPts = makeOrganicWaterPolygon(lat, lon, radiusM * 0.72, Math.max(24, vertexCount - 6), shapeSeed + 0.91);
 
-      // Outer halo for severe/extreme — softer glow without a visible dashed edge
-      if (acc.level === 'severe' || acc.level === 'extreme') {
-        L.polygon(outerPolyPts, {
-          color: 'transparent', fillColor: mapFill,
-          fillOpacity: acc.level === 'extreme' ? 0.06 : 0.04,
-          weight: 0,
-          opacity: 0,
-          smoothFactor: 4.6,
-          interactive: false,
-        }).addTo(group);
-      }
+      // Broad diffuse wash first so the patch feels integrated with the satellite basemap rather than a glowing blue blob
+      L.polygon(outerPolyPts, {
+        color: 'transparent',
+        fillColor: satelliteStyle.washColor,
+        fillOpacity: satelliteStyle.washOpacity,
+        weight: 0,
+        opacity: 0,
+        smoothFactor: 6.5,
+        interactive: false,
+      }).addTo(group);
 
-      // Main accumulation polygon — lighter fill and softer border so water reads cleaner on the basemap
-      const fillOpacity = acc.level === 'extreme' ? 0.18 : acc.level === 'severe' ? 0.15 : acc.level === 'moderate' ? 0.11 : acc.level === 'minor' ? 0.07 : 0.05;
-      const weight      = acc.level === 'extreme' ? 0.9 : acc.level === 'severe' ? 0.7 : 0.45;
-
+      // Main accumulation polygon — flatter turquoise fill with almost invisible edge
       L.polygon(polyPts, {
-        color: stroke, fillColor: mapFill,
-        fillOpacity, weight,
-        opacity: 0.35,
-        smoothFactor: 4.8,
+        color: satelliteStyle.edgeColor,
+        fillColor: satelliteStyle.fillColor,
+        fillOpacity: satelliteStyle.fillOpacity,
+        weight: satelliteStyle.edgeWeight,
+        opacity: satelliteStyle.edgeOpacity,
+        smoothFactor: 6.2,
       }).bindTooltip(`
         <div style="font-family:Tajawal,sans-serif;direction:rtl;min-width:260px;background:#0a0f1e;color:#e2e8f0;border-radius:10px;padding:14px;border:1px solid ${stroke};">
           <!-- Header -->
@@ -2035,6 +2112,17 @@ export default function UnifiedMapPage() {
         </div>
       `, { className: 'flood-popup', sticky: true, direction: 'top' })
         .addTo(group);
+
+      // Subtle inner tint to avoid a hard-edged blob and create a more satellite-like shallow pooling core
+      L.polygon(innerPolyPts, {
+        color: 'transparent',
+        fillColor: satelliteStyle.fillColor,
+        fillOpacity: Math.min(0.34, satelliteStyle.fillOpacity + 0.035),
+        weight: 0,
+        opacity: 0,
+        smoothFactor: 6.4,
+        interactive: false,
+      }).addTo(group);
 
       // Label marker: show region name + depth for severe/extreme only (reduce clutter)
       if (acc.level === 'severe' || acc.level === 'extreme') {
