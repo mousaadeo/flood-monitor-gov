@@ -1950,11 +1950,11 @@ export default function UnifiedMapPage() {
         const pts: [number, number][] = [];
         for (let i = 0; i < N; i++) {
           const angle = (i / N) * Math.PI * 2;
-          // Per-vertex jitter: 55%–100% of radius
-          const jitter = 0.55 + 0.45 * Math.abs(Math.sin(s * 17.3 + i * 2.39 + angle));
-          // Slight elongation for natural look
-          const rx = rM * jitter * (1.0 + 0.22 * Math.sin(s * 7.1));
-          const ry = rM * jitter * (0.72 + 0.22 * Math.cos(s * 5.3));
+          // Softer per-vertex jitter to keep water patches organic without looking spiky/heavy
+          const jitter = 0.80 + 0.20 * Math.abs(Math.sin(s * 17.3 + i * 2.39 + angle));
+          // Gentler elongation for a smoother flooded-area silhouette
+          const rx = rM * jitter * (1.0 + 0.10 * Math.sin(s * 7.1));
+          const ry = rM * jitter * (0.86 + 0.10 * Math.cos(s * 5.3));
           pts.push([
             cLat + mToLat(Math.sin(angle) * ry),
             cLon + mToLng(Math.cos(angle) * rx),
@@ -1962,27 +1962,30 @@ export default function UnifiedMapPage() {
         }
         return pts;
       }
-      const polyPts = makeOrganicPoly(lat, lon, radiusM, 20, shapeSeed);
-      const outerPolyPts = makeOrganicPoly(lat, lon, radiusM * 1.35, 20, shapeSeed + 0.5);
+      const polyPts = makeOrganicPoly(lat, lon, radiusM, 28, shapeSeed);
+      const outerPolyPts = makeOrganicPoly(lat, lon, radiusM * 1.22, 28, shapeSeed + 0.5);
 
-      // Outer halo for severe/extreme (dashed, very transparent)
+      // Outer halo for severe/extreme — softer glow without a visible dashed edge
       if (acc.level === 'severe' || acc.level === 'extreme') {
         L.polygon(outerPolyPts, {
-          color: color, fillColor: color,
-          fillOpacity: 0.04, weight: 1,
-          dashArray: '6 4', opacity: 0.35,
-          smoothFactor: 3.0,
+          color: 'transparent', fillColor: mapFill,
+          fillOpacity: acc.level === 'extreme' ? 0.06 : 0.04,
+          weight: 0,
+          opacity: 0,
+          smoothFactor: 4.6,
+          interactive: false,
         }).addTo(group);
       }
 
-      // Main accumulation polygon — organic shape, unified colors
-      const fillOpacity = acc.level === 'extreme' ? 0.28 : acc.level === 'severe' ? 0.22 : acc.level === 'moderate' ? 0.16 : acc.level === 'minor' ? 0.10 : 0.07;
-      const weight      = acc.level === 'extreme' ? 2.0 : acc.level === 'severe' ? 1.5 : 1.0;
+      // Main accumulation polygon — lighter fill and softer border so water reads cleaner on the basemap
+      const fillOpacity = acc.level === 'extreme' ? 0.18 : acc.level === 'severe' ? 0.15 : acc.level === 'moderate' ? 0.11 : acc.level === 'minor' ? 0.07 : 0.05;
+      const weight      = acc.level === 'extreme' ? 0.9 : acc.level === 'severe' ? 0.7 : 0.45;
 
       L.polygon(polyPts, {
         color: stroke, fillColor: mapFill,
         fillOpacity, weight,
-        smoothFactor: 3.5,
+        opacity: 0.35,
+        smoothFactor: 4.8,
       }).bindTooltip(`
         <div style="font-family:Tajawal,sans-serif;direction:rtl;min-width:260px;background:#0a0f1e;color:#e2e8f0;border-radius:10px;padding:14px;border:1px solid ${stroke};">
           <!-- Header -->
