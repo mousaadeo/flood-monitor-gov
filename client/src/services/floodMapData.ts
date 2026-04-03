@@ -710,9 +710,12 @@ export const ALL_FLOOD_ZONES_MULTI = [...FLOOD_ZONES_L1, ...FLOOD_ZONES_L2, ...F
 
 // Helper: get zones for a given zoom level
 export function getZonesForZoom(zoom: number): FloodZoneMulti[] {
-  if (zoom <= 9)  return FLOOD_ZONES_L1;
-  if (zoom <= 12) return [...FLOOD_ZONES_L1, ...FLOOD_ZONES_L2];
-  return [...FLOOD_ZONES_L2, ...FLOOD_ZONES_L3];
+  // لا نعرض طبقة تراكمات مائية واسعة على مستوى المدينة، لأن ذلك يولّد كتلاً زرقاء
+  // غير واقعية بصرياً فوق الصور الجوية. نبدأ من مستوى الأحياء ثم ننتقل إلى النقاط
+  // الأدق على مستوى الشارع عند التكبير العالي.
+  if (zoom <= 9) return [];
+  if (zoom <= 12) return FLOOD_ZONES_L2;
+  return FLOOD_ZONES_L3;
 }
 
 
